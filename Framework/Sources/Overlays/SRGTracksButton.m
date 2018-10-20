@@ -70,7 +70,7 @@ static void commonInit(SRGTracksButton *self);
 
 - (UIImage *)image
 {
-    return _image ?: [UIImage imageNamed:@"alternate_tracks_button" inBundle:[NSBundle srg_mediaPlayerBundle] compatibleWithTraitCollection:nil];
+    return _image ?: [UIImage imageNamed:@"alternate_tracks_button" inBundle:NSBundle.srg_mediaPlayerBundle compatibleWithTraitCollection:nil];
 }
 
 - (void)setImage:(UIImage *)image
@@ -81,7 +81,7 @@ static void commonInit(SRGTracksButton *self);
 
 - (UIImage *)selectedImage
 {
-    return _selectedImage ?: [UIImage imageNamed:@"alternate_tracks_button_selected" inBundle:[NSBundle srg_mediaPlayerBundle] compatibleWithTraitCollection:nil];
+    return _selectedImage ?: [UIImage imageNamed:@"alternate_tracks_button_selected" inBundle:NSBundle.srg_mediaPlayerBundle compatibleWithTraitCollection:nil];
 }
 
 - (void)setSelectedImage:(UIImage *)selectedImage
@@ -216,6 +216,7 @@ static void commonInit(SRGTracksButton *self);
     UIButton *fakeInterfaceBuilderButton = [UIButton buttonWithType:UIButtonTypeSystem];
     fakeInterfaceBuilderButton.frame = self.bounds;
     fakeInterfaceBuilderButton.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    fakeInterfaceBuilderButton.imageView.contentMode = UIViewContentModeScaleAspectFill;
     [fakeInterfaceBuilderButton setImage:self.image forState:UIControlStateNormal];
     [self addSubview:fakeInterfaceBuilderButton];
     self.fakeInterfaceBuilderButton = fakeInterfaceBuilderButton;
@@ -255,6 +256,7 @@ static void commonInit(SRGTracksButton *self)
     UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
     button.frame = self.bounds;
     button.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    button.imageView.contentMode = UIViewContentModeScaleAspectFill;
     [button addTarget:self action:@selector(showSubtitlesMenu:) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:button];
     self.button = button;

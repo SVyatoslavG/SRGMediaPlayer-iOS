@@ -6,6 +6,7 @@
 
 #import "SRGTimeSlider.h"
 
+#import "CMTimeRange+SRGMediaPlayer.h"
 #import "NSBundle+SRGMediaPlayer.h"
 #import "UIBezierPath+SRGMediaPlayer.h"
 
@@ -43,7 +44,7 @@ static NSString *SRGTimeSliderFormatter(NSTimeInterval seconds)
 static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
 {
     if (isnan(seconds) || isinf(seconds)) {
-       return nil;
+        return nil;
     }
     
     static NSDateComponentsFormatter *s_dateComponentsFormatter;
@@ -63,6 +64,8 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
 @property (nonatomic) UIColor *overriddenThumbTintColor;
 @property (nonatomic) UIColor *overriddenMaximumTrackTintColor;
 @property (nonatomic) UIColor *overriddenMinimumTrackTintColor;
+
+@property (nonatomic) NSArray<NSValue *> *previousLoadedTimeRanges;
 
 @end
 
@@ -98,12 +101,12 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
     if (_mediaPlayerController) {
         [_mediaPlayerController removePeriodicTimeObserver:self.periodicTimeObserver];
         
-        [[NSNotificationCenter defaultCenter] removeObserver:self
-                                                        name:SRGMediaPlayerPlaybackStateDidChangeNotification
-                                                      object:_mediaPlayerController];
-        [[NSNotificationCenter defaultCenter] removeObserver:self
-                                                        name:SRGMediaPlayerSeekNotification
-                                                      object:_mediaPlayerController];
+        [NSNotificationCenter.defaultCenter removeObserver:self
+                                                      name:SRGMediaPlayerPlaybackStateDidChangeNotification
+                                                    object:_mediaPlayerController];
+        [NSNotificationCenter.defaultCenter removeObserver:self
+                                                      name:SRGMediaPlayerSeekNotification
+                                                    object:_mediaPlayerController];
     }
     
     _mediaPlayerController = mediaPlayerController;
@@ -119,14 +122,14 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
         }];
         [self updateDisplayWithTime:mediaPlayerController.player.currentTime];
         
-        [[NSNotificationCenter defaultCenter] addObserver:self
-                                                 selector:@selector(srg_timeSlider_playbackStateDidChange:)
-                                                     name:SRGMediaPlayerPlaybackStateDidChangeNotification
-                                                   object:mediaPlayerController];
-        [[NSNotificationCenter defaultCenter] addObserver:self
-                                                 selector:@selector(srg_timeSlider_seek:)
-                                                     name:SRGMediaPlayerSeekNotification
-                                                   object:mediaPlayerController];
+        [NSNotificationCenter.defaultCenter addObserver:self
+                                               selector:@selector(srg_timeSlider_playbackStateDidChange:)
+                                                   name:SRGMediaPlayerPlaybackStateDidChangeNotification
+                                                 object:mediaPlayerController];
+        [NSNotificationCenter.defaultCenter addObserver:self
+                                               selector:@selector(srg_timeSlider_seek:)
+                                                   name:SRGMediaPlayerSeekNotification
+                                                 object:mediaPlayerController];
     }
 }
 
@@ -136,14 +139,19 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
     return self.minimumValue != self.maximumValue;
 }
 
-- (void)setBorderColor:(UIColor *)borderColor
+- (void)setTrackThickness:(CGFloat)trackThickness
 {
-    _borderColor = borderColor ?: [UIColor blackColor];
+    if (trackThickness >= 1.f) {
+        _trackThickness = trackThickness;
+    }
+    else {
+        _trackThickness = 1.f;
+    }
 }
 
 - (void)setBufferingTrackColor:(UIColor *)bufferingTrackColor
 {
-    _bufferingTrackColor = bufferingTrackColor ?: [UIColor darkGrayColor];
+    _bufferingTrackColor = bufferingTrackColor ?: UIColor.darkGrayColor;
 }
 
 // Override color properties since the default superclass behavior is to remove corresponding images, which we here
@@ -151,7 +159,7 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
 
 - (UIColor *)thumbTintColor
 {
-    return self.overriddenThumbTintColor ?: [UIColor whiteColor];
+    return self.overriddenThumbTintColor ?: UIColor.whiteColor;
 }
 
 - (void)setThumbTintColor:(UIColor *)thumbTintColor
@@ -161,7 +169,7 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
 
 - (UIColor *)minimumTrackTintColor
 {
-    return self.overriddenMinimumTrackTintColor ?: [UIColor whiteColor];
+    return self.overriddenMinimumTrackTintColor ?: UIColor.whiteColor;
 }
 
 - (void)setMinimumTrackTintColor:(UIColor *)minimumTrackTintColor
@@ -171,7 +179,7 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
 
 - (UIColor *)maximumTrackTintColor
 {
-    return self.overriddenMaximumTrackTintColor ?: [UIColor blackColor];
+    return self.overriddenMaximumTrackTintColor ?: UIColor.blackColor;
 }
 
 - (void)setMaximumTrackTintColor:(UIColor *)maximumTrackTintColor
@@ -222,7 +230,7 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
         self.value = 0.f;
         self.userInteractionEnabled = YES;
     }
-    else if (! CMTIMERANGE_IS_EMPTY(timeRange) && ! CMTIMERANGE_IS_INDEFINITE(timeRange) && ! CMTIMERANGE_IS_INVALID(timeRange)) {
+    else if (SRG_CMTIMERANGE_IS_NOT_EMPTY(timeRange) && SRG_CMTIMERANGE_IS_DEFINITE(timeRange)) {
         self.maximumValue = CMTimeGetSeconds(timeRange.duration);
         self.value = CMTimeGetSeconds(CMTimeSubtract(time, timeRange.start));
         self.userInteractionEnabled = YES;
@@ -262,7 +270,7 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
     }
     
     if (mediaPlayerController.streamType == SRGMediaPlayerStreamTypeLive) {
-        return [NSDate date];
+        return NSDate.date;
     }
     else if (mediaPlayerController.streamType == SRGMediaPlayerStreamTypeDVR) {
         return [NSDate dateWithTimeIntervalSinceNow:-CMTimeGetSeconds(CMTimeSubtract(CMTimeRangeGetEnd(timeRange), self.time))];
@@ -286,7 +294,6 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
 - (BOOL)isReadyToDisplayValues
 {
     AVPlayerItem *playerItem = self.mediaPlayerController.player.currentItem;
-
     return (playerItem && self.mediaPlayerController.playbackState != SRGMediaPlayerPlaybackStateIdle
             && self.mediaPlayerController.playbackState != SRGMediaPlayerPlaybackStateEnded
             && playerItem.status == AVPlayerItemStatusReadyToPlay
@@ -378,7 +385,7 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
     }
     
     if (self.seekingDuringTracking) {
-        [self.mediaPlayerController seekEfficientlyToTime:time withCompletionHandler:nil];
+        [self.mediaPlayerController seekToPosition:[SRGPosition positionAroundTime:time] withCompletionHandler:nil];
     }
     
     if ([self.delegate respondsToSelector:@selector(timeSlider:isMovingToPlaybackTime:withValue:interactive:)]) {
@@ -391,7 +398,7 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
 - (void)endTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event
 {
     if ([self isDraggable]) {
-        [self.mediaPlayerController seekEfficientlyToTime:self.time withCompletionHandler:^(BOOL finished) {
+        [self.mediaPlayerController seekToPosition:[SRGPosition positionAroundTime:self.time] withCompletionHandler:^(BOOL finished) {
             if (self.resumingAfterSeek) {
                 [self.mediaPlayerController play];
             }
@@ -408,7 +415,7 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
     UIView *view = [[UIView alloc] initWithFrame:CGRectMake(0.f, 0.f, 2.f, 2.f)];
     UIGraphicsBeginImageContextWithOptions(view.frame.size, NO, 0.f);
     [view.layer renderInContext:UIGraphicsGetCurrentContext()];
-    [[UIColor clearColor] set];
+    [UIColor.clearColor set];
     UIImage *viewImage = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
     
@@ -428,48 +435,49 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
     [super drawRect:rect];
     
     CGContextRef context = UIGraphicsGetCurrentContext();
-    [self drawBar:context];
     [self drawMaximumTrack:context];
     [self drawMinimumTrack:context];
-}
-
-- (void)drawBar:(CGContextRef)context
-{
-    CGRect trackFrame = [self trackRectForBounds:self.bounds];
     
-    CGFloat lineWidth = 3.f;
+    void (^drawTimeRanges)(NSArray<NSValue *> *) = ^(NSArray<NSValue *> *timeRanges) {
+        for (NSValue *value in timeRanges) {
+            CMTimeRange timeRange = [value CMTimeRangeValue];
+            [self drawBufferingTrackForRange:timeRange context:context];
+        }
+    };
     
-    CGContextSetLineWidth(context, lineWidth);
-    CGContextSetLineCap(context, kCGLineCapRound);
-    CGContextMoveToPoint(context, CGRectGetMinX(trackFrame), CGRectGetMidY(self.bounds));
-    CGContextAddLineToPoint(context, CGRectGetWidth(trackFrame), CGRectGetMidY(self.bounds));
-    CGContextSetStrokeColorWithColor(context, self.borderColor.CGColor);
-    CGContextStrokePath(context);
+    // In general, draw all loaded time ranges
+    if (self.mediaPlayerController.playbackState != SRGMediaPlayerPlaybackStateSeeking) {
+        NSArray<NSValue *> *loadedTimeRanges = self.mediaPlayerController.player.currentItem.loadedTimeRanges;
+        drawTimeRanges(loadedTimeRanges);
+        self.previousLoadedTimeRanges = loadedTimeRanges;
+    }
+    // If the player is seeking, find whether the player is seeking within one of the previous time ranges we
+    // were displaying (though it might change during the seek). While this remains true, display the same ranges
+    // as before (even if they are not perfectly up to date), so that the track never jumps erratically.
+    else {
+        for (NSValue *timeRange in self.previousLoadedTimeRanges) {
+            if (CMTimeRangeContainsTime(timeRange.CMTimeRangeValue, self.time)) {
+                drawTimeRanges(self.previousLoadedTimeRanges);
+                return;
+            }
+        }
+    }
 }
 
 - (void)drawMaximumTrack:(CGContextRef)context
 {
-    CGRect trackFrame = [self trackRectForBounds:self.bounds];
+    CGRect trackFrame = [self maximumValueImageRectForBounds:self.bounds];
     
-    CGFloat lineWidth = 1.f;
-    
-    CGContextSetLineWidth(context, lineWidth);
-    CGContextSetLineCap(context, kCGLineCapButt);
-    CGContextMoveToPoint(context, CGRectGetMinX(trackFrame) + 2.f, CGRectGetMidY(self.bounds));
-    CGContextAddLineToPoint(context, CGRectGetMaxX(trackFrame) - 2.f, CGRectGetMidY(self.bounds));
+    CGContextSetLineWidth(context, self.trackThickness);
+    CGContextSetLineCap(context, kCGLineCapRound);
+    CGContextMoveToPoint(context, CGRectGetMinX(trackFrame), CGRectGetMidY(self.bounds));
+    CGContextAddLineToPoint(context, CGRectGetMaxX(trackFrame), CGRectGetMidY(self.bounds));
     CGContextSetStrokeColorWithColor(context, self.maximumTrackTintColor.CGColor);
     CGContextStrokePath(context);
-    
-    for (NSValue *value in self.mediaPlayerController.player.currentItem.loadedTimeRanges) {
-        CMTimeRange timeRange = [value CMTimeRangeValue];
-        [self drawBuferringTrackForRange:timeRange context:context];
-    }
 }
 
-- (void)drawBuferringTrackForRange:(CMTimeRange)timeRange context:(CGContextRef)context
+- (void)drawBufferingTrackForRange:(CMTimeRange)timeRange context:(CGContextRef)context
 {
-    CGFloat lineWidth = 1.f;
-    
     CGFloat duration = CMTimeGetSeconds(self.mediaPlayerController.player.currentItem.duration);
     if (isnan(duration)) {
         return;
@@ -477,11 +485,11 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
     
     CGRect trackFrame = [self trackRectForBounds:self.bounds];
     
-    CGFloat minX = CGRectGetWidth(trackFrame) / duration * CMTimeGetSeconds(timeRange.start);
-    CGFloat maxX = CGRectGetWidth(trackFrame) / duration * (CMTimeGetSeconds(timeRange.start) + CMTimeGetSeconds(timeRange.duration));
+    CGFloat minX = CGRectGetMinX(trackFrame) + CGRectGetWidth(trackFrame) / duration * CMTimeGetSeconds(timeRange.start);
+    CGFloat maxX = CGRectGetMinX(trackFrame) + CGRectGetWidth(trackFrame) / duration * CMTimeGetSeconds(CMTimeRangeGetEnd(timeRange));
     
-    CGContextSetLineWidth(context, lineWidth);
-    CGContextSetLineCap(context, kCGLineCapButt);
+    CGContextSetLineWidth(context, self.trackThickness);
+    CGContextSetLineCap(context, kCGLineCapRound);
     CGContextMoveToPoint(context, minX, CGRectGetMidY(self.bounds));
     CGContextAddLineToPoint(context, maxX, CGRectGetMidY(self.bounds));
     CGContextSetStrokeColorWithColor(context, self.bufferingTrackColor.CGColor);
@@ -492,11 +500,9 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
 {
     CGRect barFrame = [self minimumValueImageRectForBounds:self.bounds];
     
-    CGFloat lineWidth = 3.f;
-    
-    CGContextSetLineWidth(context, lineWidth);
+    CGContextSetLineWidth(context, self.trackThickness);
     CGContextSetLineCap(context, kCGLineCapRound);
-    CGContextMoveToPoint(context, CGRectGetMinX(barFrame) - 0.5f, CGRectGetMidY(self.bounds));
+    CGContextMoveToPoint(context, CGRectGetMinX(barFrame), CGRectGetMidY(self.bounds));
     CGContextAddLineToPoint(context, CGRectGetWidth(barFrame), CGRectGetMidY(self.bounds));
     CGContextSetStrokeColorWithColor(context, self.minimumTrackTintColor.CGColor);
     CGContextStrokePath(context);
@@ -514,6 +520,8 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
 - (void)srg_timeSlider_playbackStateDidChange:(NSNotification *)notification
 {
     if (self.mediaPlayerController.playbackState == SRGMediaPlayerPlaybackStateIdle) {
+        self.previousLoadedTimeRanges = nil;
+        
         float value = [self resetValue];
         self.value = value;
         self.maximumValue = value;
@@ -584,12 +592,13 @@ static NSString *SRGTimeSliderAccessibilityFormatter(NSTimeInterval seconds)
 static void commonInit(SRGTimeSlider *self)
 {
     // Apply default colors
-    self.borderColor = nil;
     self.bufferingTrackColor = nil;
     
     self.minimumValue = 0.f;                    // Always 0
     self.maximumValue = 0.f;
     self.value = 0.f;
+    
+    self.trackThickness = 3.f;
     
     UIImage *triangle = [self emptyImage];
     UIImage *image = [triangle resizableImageWithCapInsets:UIEdgeInsetsMake(1.f, 1.f, 1.f, 1.f)];

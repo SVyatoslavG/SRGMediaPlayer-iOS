@@ -18,7 +18,7 @@ NS_ASSUME_NONNULL_BEGIN
 /**
  *  The motion manager which has been set, if any.
  */
-+ (nullable CMMotionManager *)motionManager;
+@property (class, nonatomic, readonly, nullable) CMMotionManager *motionManager;
 
 /**
  *  The player associated with the view.
@@ -29,6 +29,11 @@ NS_ASSUME_NONNULL_BEGIN
  *  The player layer associated with the view.
  */
 @property (nonatomic, readonly, nullable) AVPlayerLayer *playerLayer;
+
+/**
+ *  Set to `YES` to hide the internal view used for playback. Default is `NO`.
+ */
+@property (nonatomic, getter=isPlaybackViewHidden) BOOL playbackViewHidden;
 
 @end
 

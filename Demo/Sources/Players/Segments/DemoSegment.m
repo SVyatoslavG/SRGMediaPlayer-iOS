@@ -4,9 +4,9 @@
 //  License information is available from the LICENSE file.
 //
 
-#import "Segment.h"
+#import "DemoSegment.h"
 
-@interface Segment ()
+@interface DemoSegment ()
 
 @property (nonatomic, copy) NSString *name;
 @property (nonatomic) CMTimeRange srg_timeRange;
@@ -15,7 +15,7 @@
 
 @end
 
-@implementation Segment
+@implementation DemoSegment
 
 #pragma mark Object lifecycle
 
@@ -45,7 +45,7 @@
 
 - (NSURL *)thumbnailURL
 {
-    NSString *imageFilePath = [[NSBundle mainBundle] pathForResource:@"thumbnail-placeholder" ofType:@"png"];
+    NSString *imageFilePath = [NSBundle.mainBundle pathForResource:@"thumbnail-placeholder" ofType:@"png"];
     return [NSURL fileURLWithPath:imageFilePath];
 }
 
@@ -53,8 +53,8 @@
 
 - (NSString *)description
 {
-    return [NSString stringWithFormat:@"<%@: %p; start: %@; duration: %@; name: %@; blocked: %@; hidden: %@>",
-            [self class],
+    return [NSString stringWithFormat:@"<%@: %p; start = %@; duration = %@; name: %@; blocked = %@; hidden = %@>",
+            self.class,
             self,
             @(CMTimeGetSeconds(self.srg_timeRange.start)),
             @(CMTimeGetSeconds(self.srg_timeRange.duration)),

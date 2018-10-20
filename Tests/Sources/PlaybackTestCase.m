@@ -11,7 +11,6 @@
 #import <libextobjc/libextobjc.h>
 #import <MAKVONotificationCenter/MAKVONotificationCenter.h>
 #import <SRGMediaPlayer/SRGMediaPlayer.h>
-#import <XCTest/XCTest.h>
 
 static NSURL *OnDemandTestURL(void)
 {
@@ -131,7 +130,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return YES;
     }];
     
-    [self.mediaPlayerController prepareToPlayURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil completionHandler:^{
+    [self.mediaPlayerController prepareToPlayURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:nil completionHandler:^{
         // Upon completion handler entry, the state is always preparing
         XCTAssertEqual(self.mediaPlayerController.playbackState, SRGMediaPlayerPlaybackStatePreparing);
     }];
@@ -166,12 +165,12 @@ static NSURL *AudioOverHTTPTestURL(void)
     }];
     
     AVPlayerItem *playerItem = [AVPlayerItem playerItemWithURL:OnDemandTestURL()];
-    [self.mediaPlayerController prepareToPlayItem:playerItem atTime:kCMTimeZero withSegments:nil userInfo:nil completionHandler:^{
+    [self.mediaPlayerController prepareToPlayItem:playerItem atPosition:nil withSegments:nil userInfo:nil completionHandler:^{
         // Upon completion handler entry, the state is always preparing
         XCTAssertEqual(self.mediaPlayerController.playbackState, SRGMediaPlayerPlaybackStatePreparing);
     }];
     
-    XCTAssertNil(self.mediaPlayerController.contentURL);
+    XCTAssertEqualObjects(self.mediaPlayerController.contentURL, OnDemandTestURL());
     XCTAssertEqualObjects(self.mediaPlayerController.playerItem, playerItem);
     
     TestAssertIndefiniteTime(self.mediaPlayerController.seekStartTime);
@@ -196,7 +195,7 @@ static NSURL *AudioOverHTTPTestURL(void)
 {
     XCTestExpectation *preparationExpectation = [self expectationWithDescription:@"Playing"];
     
-    [self.mediaPlayerController prepareToPlayURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil completionHandler:^{
+    [self.mediaPlayerController prepareToPlayURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:nil completionHandler:^{
         // Upon completion handler entry, the state is always preparing
         XCTAssertEqual(self.mediaPlayerController.playbackState, SRGMediaPlayerPlaybackStatePreparing);
         
@@ -212,18 +211,18 @@ static NSURL *AudioOverHTTPTestURL(void)
 
 - (void)testMultiplePrepare
 {
-    [self.mediaPlayerController prepareToPlayURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil completionHandler:^{
+    [self.mediaPlayerController prepareToPlayURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:nil completionHandler:^{
         XCTFail(@"The completion handler must not be called since a second prepare must cancel the first");
     }];
     
     XCTestExpectation *preparationExpectation = [self expectationWithDescription:@"Prepared"];
     
-    [self.mediaPlayerController prepareToPlayURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil completionHandler:^{
+    [self.mediaPlayerController prepareToPlayURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:nil completionHandler:^{
         XCTAssertEqual(self.mediaPlayerController.playbackState, SRGMediaPlayerPlaybackStatePreparing);
         [preparationExpectation fulfill];
     }];
     
-   [self waitForExpectationsWithTimeout:30. handler:nil];
+    [self waitForExpectationsWithTimeout:30. handler:nil];
 }
 
 - (void)testWithoutPrepare
@@ -241,7 +240,11 @@ static NSURL *AudioOverHTTPTestURL(void)
         return YES;
     }];
     
-    [self.mediaPlayerController prepareToPlayURL:OnDemandTestURL() atTime:CMTimeMakeWithSeconds(24. * 60. * 60., NSEC_PER_SEC) withSegments:nil userInfo:nil completionHandler:nil];
+    [self.mediaPlayerController prepareToPlayURL:OnDemandTestURL()
+                                      atPosition:[SRGPosition positionAtTimeInSeconds:24. * 60. * 60.]
+                                    withSegments:nil
+                                        userInfo:nil
+                               completionHandler:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -286,7 +289,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:CMTimeMakeWithSeconds(20., NSEC_PER_SEC) withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:[SRGPosition positionAtTimeInSeconds:20.] withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -300,7 +303,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController playURL:DVRTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:DVRTestURL() atPosition:nil withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -314,12 +317,26 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController playURL:DVRTestURL() atTime:CMTimeMakeWithSeconds(20., NSEC_PER_SEC) withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:DVRTestURL() atPosition:[SRGPosition positionAtTimeInSeconds:20.] withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
     // Check we started at the specified location
     XCTAssertTrue(CMTIME_COMPARE_INLINE(self.mediaPlayerController.currentTime, ==, CMTimeMakeWithSeconds(20., NSEC_PER_SEC)));
+}
+
+- (void)testOnDemandPlaybackStartAtTimeWithTolerances
+{
+    [self mpt_expectationForNotification:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController handler:^BOOL(NSNotification * _Nonnull notification) {
+        return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
+    }];
+    
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:[SRGPosition positionAroundTimeInSeconds:22.] withSegments:nil userInfo:nil];
+    
+    [self waitForExpectationsWithTimeout:30. handler:nil];
+    
+    // Check we started near the specified location
+    TestAssertAlmostButNotEqual(self.mediaPlayerController.currentTime, 22, 4);
 }
 
 - (void)testVideoTrackInLastPosition
@@ -376,7 +393,7 @@ static NSURL *AudioOverHTTPTestURL(void)
 {
     // Play the media. Two events expected: Preparing and playing
     __block NSInteger count1 = 0;
-    id eventObserver1 = [[NSNotificationCenter defaultCenter] addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+    id eventObserver1 = [NSNotificationCenter.defaultCenter addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         ++count1;
     }];
     
@@ -387,14 +404,14 @@ static NSURL *AudioOverHTTPTestURL(void)
     [self.mediaPlayerController playURL:OnDemandTestURL()];
     
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
-        [[NSNotificationCenter defaultCenter] removeObserver:eventObserver1];
+        [NSNotificationCenter.defaultCenter removeObserver:eventObserver1];
     }];
     
     // Two events expected: preparing and playing
     XCTAssertEqual(count1, 2);
-
+    
     __block NSInteger count2 = 0;
-    id eventObserver2 = [[NSNotificationCenter defaultCenter] addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+    id eventObserver2 = [NSNotificationCenter.defaultCenter addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         ++count2;
     }];
     
@@ -405,14 +422,14 @@ static NSURL *AudioOverHTTPTestURL(void)
     [self.mediaPlayerController pause];
     
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
-        [[NSNotificationCenter defaultCenter] removeObserver:eventObserver2];
+        [NSNotificationCenter.defaultCenter removeObserver:eventObserver2];
     }];
     
     // One event expected: paused
     XCTAssertEqual(count2, 1);
     
     __block NSInteger count3 = 0;
-    id eventObserver3 = [[NSNotificationCenter defaultCenter] addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+    id eventObserver3 = [NSNotificationCenter.defaultCenter addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         ++count3;
     }];
     
@@ -423,7 +440,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     [self.mediaPlayerController play];
     
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
-        [[NSNotificationCenter defaultCenter] removeObserver:eventObserver3];
+        [NSNotificationCenter.defaultCenter removeObserver:eventObserver3];
     }];
     
     // One event expected: playing
@@ -431,7 +448,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     
     [self expectationForElapsedTimeInterval:3. withHandler:nil];
     
-    id eventObserver4 = [[NSNotificationCenter defaultCenter] addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+    id eventObserver4 = [NSNotificationCenter.defaultCenter addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         // Also see http://stackoverflow.com/questions/14565405/avplayer-pauses-for-no-obvious-reason and
         // the demo project https://github.com/defagos/radars/tree/master/unexpected-player-rate-changes
         NSLog(@"[AVPlayer probable bug]: Unexpected state change to %@. Fast play - pause sequences can induce unexpected rate changes "
@@ -439,7 +456,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     }];
     
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
-        [[NSNotificationCenter defaultCenter] removeObserver:eventObserver4];
+        [NSNotificationCenter.defaultCenter removeObserver:eventObserver4];
     }];
 }
 
@@ -447,7 +464,7 @@ static NSURL *AudioOverHTTPTestURL(void)
 {
     // Play the media. Two events expected: Preparing and playing
     __block NSInteger count1 = 0;
-    id eventObserver1 = [[NSNotificationCenter defaultCenter] addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+    id eventObserver1 = [NSNotificationCenter.defaultCenter addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         ++count1;
     }];
     
@@ -464,7 +481,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     [self.mediaPlayerController playURL:OnDemandTestURL()];
     
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
-        [[NSNotificationCenter defaultCenter] removeObserver:eventObserver1];
+        [NSNotificationCenter.defaultCenter removeObserver:eventObserver1];
     }];
     
     TestAssertIndefiniteTime(self.mediaPlayerController.seekStartTime);
@@ -474,7 +491,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     XCTAssertEqual(count1, 2);
     
     __block NSInteger count2 = 0;
-    id eventObserver2 = [[NSNotificationCenter defaultCenter] addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+    id eventObserver2 = [NSNotificationCenter.defaultCenter addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         ++count2;
     }];
     
@@ -497,13 +514,13 @@ static NSURL *AudioOverHTTPTestURL(void)
         return seekReceived && playReceived;
     }];
     
-    [self.mediaPlayerController seekPreciselyToTime:CMTimeMakeWithSeconds(2., NSEC_PER_SEC) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:2.] withCompletionHandler:nil];
     
     TestAssertEqualTimeInSeconds(self.mediaPlayerController.seekStartTime, 0);
     TestAssertEqualTimeInSeconds(self.mediaPlayerController.seekTargetTime, 2);
     
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
-        [[NSNotificationCenter defaultCenter] removeObserver:eventObserver2];
+        [NSNotificationCenter.defaultCenter removeObserver:eventObserver2];
     }];
     
     TestAssertIndefiniteTime(self.mediaPlayerController.seekStartTime);
@@ -514,7 +531,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     
     [self expectationForElapsedTimeInterval:3. withHandler:nil];
     
-    id eventObserver3 = [[NSNotificationCenter defaultCenter] addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+    id eventObserver3 = [NSNotificationCenter.defaultCenter addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         // Also see http://stackoverflow.com/questions/14565405/avplayer-pauses-for-no-obvious-reason and
         // the demo project https://github.com/defagos/radars/tree/master/unexpected-player-rate-changes
         NSLog(@"[AVPlayer probable bug]: Unexpected state change to %@. Fast play - pause sequences can induce unexpected rate changes "
@@ -522,7 +539,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     }];
     
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
-        [[NSNotificationCenter defaultCenter] removeObserver:eventObserver3];
+        [NSNotificationCenter.defaultCenter removeObserver:eventObserver3];
     }];
 }
 
@@ -530,7 +547,7 @@ static NSURL *AudioOverHTTPTestURL(void)
 {
     // Play the media. Two events expected: Preparing and playing
     __block NSInteger count1 = 0;
-    id eventObserver1 = [[NSNotificationCenter defaultCenter] addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+    id eventObserver1 = [NSNotificationCenter.defaultCenter addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         ++count1;
     }];
     
@@ -547,7 +564,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     [self.mediaPlayerController playURL:OnDemandTestURL()];
     
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
-        [[NSNotificationCenter defaultCenter] removeObserver:eventObserver1];
+        [NSNotificationCenter.defaultCenter removeObserver:eventObserver1];
     }];
     
     TestAssertIndefiniteTime(self.mediaPlayerController.seekStartTime);
@@ -557,7 +574,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     XCTAssertEqual(count1, 2);
     
     __block NSInteger count2 = 0;
-    id eventObserver2 = [[NSNotificationCenter defaultCenter] addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+    id eventObserver2 = [NSNotificationCenter.defaultCenter addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         ++count2;
     }];
     
@@ -568,7 +585,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     [self.mediaPlayerController pause];
     
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
-        [[NSNotificationCenter defaultCenter] removeObserver:eventObserver2];
+        [NSNotificationCenter.defaultCenter removeObserver:eventObserver2];
     }];
     
     TestAssertIndefiniteTime(self.mediaPlayerController.seekStartTime);
@@ -578,7 +595,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     XCTAssertEqual(count2, 1);
     
     __block NSInteger count3 = 0;
-    id eventObserver3 = [[NSNotificationCenter defaultCenter] addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+    id eventObserver3 = [NSNotificationCenter.defaultCenter addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         ++count3;
     }];
     
@@ -605,13 +622,13 @@ static NSURL *AudioOverHTTPTestURL(void)
         return seekReceived && pauseReceived;
     }];
     
-    [self.mediaPlayerController seekEfficientlyToTime:CMTimeMakeWithSeconds(2., NSEC_PER_SEC) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:2.] withCompletionHandler:nil];
     
     TestAssertEqualTimeInSeconds(self.mediaPlayerController.seekStartTime, 0);
     TestAssertEqualTimeInSeconds(self.mediaPlayerController.seekTargetTime, 2);
     
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
-        [[NSNotificationCenter defaultCenter] removeObserver:eventObserver3];
+        [NSNotificationCenter.defaultCenter removeObserver:eventObserver3];
     }];
     
     TestAssertIndefiniteTime(self.mediaPlayerController.seekStartTime);
@@ -622,7 +639,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     
     [self expectationForElapsedTimeInterval:3. withHandler:nil];
     
-    id eventObserver4 = [[NSNotificationCenter defaultCenter] addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+    id eventObserver4 = [NSNotificationCenter.defaultCenter addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         // Also see http://stackoverflow.com/questions/14565405/avplayer-pauses-for-no-obvious-reason and
         // the demo project https://github.com/defagos/radars/tree/master/unexpected-player-rate-changes
         NSLog(@"[AVPlayer probable bug]: Unexpected state change to %@. Fast play - pause sequences can induce unexpected rate changes "
@@ -630,7 +647,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     }];
     
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
-        [[NSNotificationCenter defaultCenter] removeObserver:eventObserver4];
+        [NSNotificationCenter.defaultCenter removeObserver:eventObserver4];
     }];
 }
 
@@ -660,7 +677,8 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController seekEfficientlyToTime:CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMake(3., NSEC_PER_SEC)) withCompletionHandler:nil];
+    SRGPosition *position = [SRGPosition positionAtTime:CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMake(3., NSEC_PER_SEC))];
+    [self.mediaPlayerController seekToPosition:position withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -720,7 +738,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStateEnded;
     }];
     
-    [self.mediaPlayerController seekEfficientlyToTime:CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMake(3., NSEC_PER_SEC)) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAroundTime:CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMake(3., NSEC_PER_SEC))] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -751,11 +769,11 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStateEnded;
     }];
     
-    [self.mediaPlayerController seekEfficientlyToTime:CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMake(3., NSEC_PER_SEC)) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAroundTime:CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMake(3., NSEC_PER_SEC))] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
-    id eventObserver = [[NSNotificationCenter defaultCenter] addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+    id eventObserver = [NSNotificationCenter.defaultCenter addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         XCTFail(@"Pausing when the stream already ended must be a no-op");
     }];
     
@@ -765,7 +783,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     [self.mediaPlayerController pause];
     
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
-        [[NSNotificationCenter defaultCenter] removeObserver:eventObserver];
+        [NSNotificationCenter.defaultCenter removeObserver:eventObserver];
     }];
 }
 
@@ -804,7 +822,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     
     XCTestExpectation *expectation = [self expectationWithDescription:@"Prepared"];
     
-    [self.mediaPlayerController prepareToPlayURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil completionHandler:^{
+    [self.mediaPlayerController prepareToPlayURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:nil completionHandler:^{
         XCTAssertEqual(self.mediaPlayerController.mediaType, SRGMediaPlayerMediaTypeVideo);
         XCTAssertEqual(self.mediaPlayerController.streamType, SRGMediaPlayerStreamTypeOnDemand);
         [expectation fulfill];
@@ -830,9 +848,9 @@ static NSURL *AudioOverHTTPTestURL(void)
 
 - (void)testLiveProperties
 {
-    // FIXME: See https://github.com/SRGSSR/SRGMediaPlayer-iOS/issues/50. Workaround so that the test passes on iOS 11.3.
+    // FIXME: See https://github.com/SRGSSR/SRGMediaPlayer-iOS/issues/50. Workaround so that the test passes on iOS >= 11.3.
     NSOperatingSystemVersion operatingSystemVersion = [NSProcessInfo processInfo].operatingSystemVersion;
-    if (operatingSystemVersion.majorVersion == 11 && operatingSystemVersion.minorVersion == 3) {
+    if (operatingSystemVersion.majorVersion == 11 && operatingSystemVersion.minorVersion >= 3) {
         self.mediaPlayerController.minimumDVRWindowLength = 40.;
     }
     
@@ -846,7 +864,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     
     XCTAssertEqual(self.mediaPlayerController.streamType, SRGMediaPlayerStreamTypeLive);
     XCTAssertTrue(self.mediaPlayerController.live);
-    XCTAssertTrue([[NSDate date] timeIntervalSinceDate:self.mediaPlayerController.date] < 0.1);
+    XCTAssertTrue([NSDate.date timeIntervalSinceDate:self.mediaPlayerController.date] < 0.1);
 }
 
 - (void)testDVRProperties
@@ -868,24 +886,24 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController seekPreciselyToTime:CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMakeWithSeconds(10., NSEC_PER_SEC)) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTime:CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMakeWithSeconds(10., NSEC_PER_SEC))] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:20. handler:nil];
     
     XCTAssertTrue(self.mediaPlayerController.live);
-    XCTAssertTrue([[NSDate date] timeIntervalSinceDate:self.mediaPlayerController.date] > 8);
+    XCTAssertTrue([NSDate.date timeIntervalSinceDate:self.mediaPlayerController.date] > 8);
     
     // Seek 40 seconds in the past. We now are outside the tolerance and therefore not live anymore
     [self mpt_expectationForNotification:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController handler:^BOOL(NSNotification * _Nonnull notification) {
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController seekPreciselyToTime:CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMakeWithSeconds(40., NSEC_PER_SEC)) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTime:CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMakeWithSeconds(40., NSEC_PER_SEC))] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:20. handler:nil];
     
     XCTAssertFalse(self.mediaPlayerController.live);
-    XCTAssertTrue([[NSDate date] timeIntervalSinceDate:self.mediaPlayerController.date] > 38);
+    XCTAssertTrue([NSDate.date timeIntervalSinceDate:self.mediaPlayerController.date] > 38);
 }
 
 - (void)testLiveTolerance
@@ -907,7 +925,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController seekPreciselyToTime:CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMakeWithSeconds(10., NSEC_PER_SEC)) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTime:CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMakeWithSeconds(10., NSEC_PER_SEC))] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:20. handler:nil];
     
@@ -918,7 +936,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController seekPreciselyToTime:CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMakeWithSeconds(60., NSEC_PER_SEC)) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTime:CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMakeWithSeconds(60., NSEC_PER_SEC))] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:20. handler:nil];
     
@@ -952,7 +970,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         XCTAssertFalse([notification.userInfo[SRGMediaPlayerSelectedKey] boolValue]);
         return YES;
     }];
-  
+    
     [self.mediaPlayerController playURL:[NSURL URLWithString:@"http://httpbin.org/status/403"]];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
@@ -970,7 +988,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     }];
     
     NSURL *URL = [NSURL URLWithString:@"http://httpbin.org/status/404"];
-    [self.mediaPlayerController prepareToPlayURL:URL atTime:kCMTimeZero withSegments:nil userInfo:nil completionHandler:^{
+    [self.mediaPlayerController prepareToPlayURL:URL atPosition:nil withSegments:nil userInfo:nil completionHandler:^{
         XCTFail(@"The completion handler must not be called when the media could not be loaded");
     }];
     
@@ -990,7 +1008,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         TestAssertIndefiniteTime(self.mediaPlayerController.seekStartTime);
         TestAssertIndefiniteTime(self.mediaPlayerController.seekTargetTime);
         
-        [self.mediaPlayerController seekToTime:CMTimeMakeWithSeconds(30., NSEC_PER_SEC) withToleranceBefore:kCMTimePositiveInfinity toleranceAfter:kCMTimePositiveInfinity completionHandler:^(BOOL finished) {
+        [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:30.] withCompletionHandler:^(BOOL finished) {
             // No seek could have interrupted this one
             XCTAssertTrue(finished);
             
@@ -1007,7 +1025,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return YES;
     }];
     
-    [self.mediaPlayerController prepareToPlayURL:OnDemandTestURL() atTime:CMTimeMakeWithSeconds(2., NSEC_PER_SEC) withSegments:nil userInfo:nil completionHandler:nil];
+    [self.mediaPlayerController prepareToPlayURL:OnDemandTestURL() atPosition:[SRGPosition positionAtTimeInSeconds:2.] withSegments:nil userInfo:nil completionHandler:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
 }
@@ -1025,7 +1043,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         TestAssertIndefiniteTime(self.mediaPlayerController.seekStartTime);
         TestAssertIndefiniteTime(self.mediaPlayerController.seekTargetTime);
         
-        [self.mediaPlayerController seekToTime:CMTimeMakeWithSeconds(30., NSEC_PER_SEC) withToleranceBefore:kCMTimePositiveInfinity toleranceAfter:kCMTimePositiveInfinity completionHandler:^(BOOL finished) {
+        [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:30.] withCompletionHandler:^(BOOL finished) {
             // No seek could have interrupted this one
             XCTAssertTrue(finished);
             
@@ -1042,7 +1060,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return YES;
     }];
     
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:CMTimeMakeWithSeconds(2., NSEC_PER_SEC) withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:[SRGPosition positionAtTimeInSeconds:2.] withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
 }
@@ -1065,14 +1083,14 @@ static NSURL *AudioOverHTTPTestURL(void)
         return YES;
     }];
     
-    [self.mediaPlayerController seekToTime:CMTimeMakeWithSeconds(30., NSEC_PER_SEC) withToleranceBefore:kCMTimePositiveInfinity toleranceAfter:kCMTimePositiveInfinity completionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:30.] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
 }
 
 - (void)testSeekWithoutPrepare
 {
-    [self.mediaPlayerController seekToTime:CMTimeMakeWithSeconds(30., NSEC_PER_SEC) withToleranceBefore:kCMTimePositiveInfinity toleranceAfter:kCMTimePositiveInfinity completionHandler:^(BOOL finished) {
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:30.] withCompletionHandler:^(BOOL finished) {
         XCTFail(@"The completion handler must not be called since a seek must do nothing if the media was not prepared");
     }];
     XCTAssertEqual(self.mediaPlayerController.playbackState, SRGMediaPlayerPlaybackStateIdle);
@@ -1093,7 +1111,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         TestAssertIndefiniteTime(self.mediaPlayerController.seekStartTime);
         TestAssertIndefiniteTime(self.mediaPlayerController.seekTargetTime);
         
-        [self.mediaPlayerController seekToTime:CMTimeMakeWithSeconds(30., NSEC_PER_SEC) withToleranceBefore:kCMTimePositiveInfinity toleranceAfter:kCMTimePositiveInfinity completionHandler:^(BOOL finished) {
+        [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:30.] withCompletionHandler:^(BOOL finished) {
             // This seek must have been interrupted by the second one
             XCTAssertFalse(finished);
             XCTAssertEqual(self.mediaPlayerController.playbackState, SRGMediaPlayerPlaybackStateSeeking);
@@ -1101,7 +1119,7 @@ static NSURL *AudioOverHTTPTestURL(void)
             TestAssertEqualTimeInSeconds(self.mediaPlayerController.seekStartTime, 2);
             TestAssertEqualTimeInSeconds(self.mediaPlayerController.seekTargetTime, 50);
         }];
-        [self.mediaPlayerController seekToTime:CMTimeMakeWithSeconds(50., NSEC_PER_SEC) withToleranceBefore:kCMTimePositiveInfinity toleranceAfter:kCMTimePositiveInfinity completionHandler:^(BOOL finished) {
+        [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:50.] withCompletionHandler:^(BOOL finished) {
             XCTAssertTrue(finished);
             XCTAssertEqual(self.mediaPlayerController.playbackState, SRGMediaPlayerPlaybackStatePlaying);
             TestAssertIndefiniteTime(self.mediaPlayerController.seekStartTime);
@@ -1116,7 +1134,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return YES;
     }];
     
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:CMTimeMakeWithSeconds(2., NSEC_PER_SEC) withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:[SRGPosition positionAtTimeInSeconds:2.] withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
 }
@@ -1134,7 +1152,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         TestAssertIndefiniteTime(self.mediaPlayerController.seekStartTime);
         TestAssertIndefiniteTime(self.mediaPlayerController.seekTargetTime);
         
-        [self.mediaPlayerController seekToTime:CMTimeMakeWithSeconds(30., NSEC_PER_SEC) withToleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero completionHandler:^(BOOL finished) {
+        [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:30.] withCompletionHandler:^(BOOL finished) {
             // This seek must have been interrupted by the second one
             XCTAssertFalse(finished);
             XCTAssertEqual(self.mediaPlayerController.playbackState, SRGMediaPlayerPlaybackStateSeeking);
@@ -1142,7 +1160,7 @@ static NSURL *AudioOverHTTPTestURL(void)
             TestAssertEqualTimeInSeconds(self.mediaPlayerController.seekStartTime, 2);
             TestAssertEqualTimeInSeconds(self.mediaPlayerController.seekTargetTime, 50);
         }];
-        [self.mediaPlayerController seekToTime:CMTimeMakeWithSeconds(50., NSEC_PER_SEC) withToleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero completionHandler:^(BOOL finished) {
+        [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:50.] withCompletionHandler:^(BOOL finished) {
             XCTAssertTrue(finished);
             XCTAssertEqual(self.mediaPlayerController.playbackState, SRGMediaPlayerPlaybackStatePlaying);
             TestAssertIndefiniteTime(self.mediaPlayerController.seekStartTime);
@@ -1157,7 +1175,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return YES;
     }];
     
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:CMTimeMakeWithSeconds(2., NSEC_PER_SEC) withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:[SRGPosition positionAtTimeInSeconds:2.] withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
 }
@@ -1176,7 +1194,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         
         __block NSInteger finishedSeekCount = 0;
         for (NSInteger i = 0; i < kSeekCount; ++i) {
-            [self.mediaPlayerController seekToTime:CMTimeMakeWithSeconds(10. + i * 5., NSEC_PER_SEC) withToleranceBefore:kCMTimePositiveInfinity toleranceAfter:kCMTimePositiveInfinity completionHandler:^(BOOL finished) {
+            [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:10. + i * 5.] withCompletionHandler:^(BOOL finished) {
                 finishedSeekCount++;
                 
                 if (i != kSeekCount - 1) {
@@ -1220,7 +1238,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStateSeeking;
     }];
     
-    [self.mediaPlayerController seekPreciselyToTime:CMTimeMakeWithSeconds(10., NSEC_PER_SEC) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:10.] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1248,7 +1266,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStateSeeking;
     }];
     
-    [self.mediaPlayerController seekPreciselyToTime:CMTimeMakeWithSeconds(10., NSEC_PER_SEC) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:10.] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1276,7 +1294,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStateSeeking;
     }];
     
-    [self.mediaPlayerController seekPreciselyToTime:CMTimeMakeWithSeconds(10., NSEC_PER_SEC) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:10.] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1304,7 +1322,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStateSeeking;
     }];
     
-    [self.mediaPlayerController seekPreciselyToTime:CMTimeMakeWithSeconds(10., NSEC_PER_SEC) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:10.] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1332,7 +1350,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStateSeeking;
     }];
     
-    [self.mediaPlayerController seekPreciselyToTime:CMTimeMakeWithSeconds(10., NSEC_PER_SEC) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:10.] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1360,7 +1378,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStateSeeking;
     }];
     
-    [self.mediaPlayerController seekPreciselyToTime:CMTimeMakeWithSeconds(10., NSEC_PER_SEC) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:10.] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1374,6 +1392,51 @@ static NSURL *AudioOverHTTPTestURL(void)
     [self waitForExpectationsWithTimeout:30. handler:nil];
 }
 
+- (void)testDVRSeeks
+{
+    [self mpt_expectationForNotification:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController handler:^BOOL(NSNotification * _Nonnull notification) {
+        return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
+    }];
+    
+    [self.mediaPlayerController playURL:DVRTestURL() atPosition:nil withSegments:nil userInfo:nil];
+    
+    [self waitForExpectationsWithTimeout:30. handler:nil];
+    
+    TestAssertEqualTimeInSeconds(self.mediaPlayerController.timeRange.start, 0.);
+    
+    [self mpt_expectationForNotification:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController handler:^BOOL(NSNotification * _Nonnull notification) {
+        return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
+    }];
+    
+    // Seek to a past position relative to the current position
+    CMTime initialTime = self.mediaPlayerController.currentTime;
+    CMTime targetTime1 = CMTimeSubtract(initialTime, CMTimeMakeWithSeconds(400., NSEC_PER_SEC));
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTime:targetTime1] withCompletionHandler:nil];
+    
+    [self waitForExpectationsWithTimeout:30. handler:nil];
+    
+    TestAssertAlmostEqual(self.mediaPlayerController.currentTime, CMTimeGetSeconds(targetTime1), 1.);
+    TestAssertEqualTimeInSeconds(self.mediaPlayerController.timeRange.start, 0.);
+    
+    // The stream chunk size is 10 seconds and the stream window is sliding. Play a little bit longer than the chunk size
+    // so that a new chunk is pumped in at the end (and a chunk pumped out at the beginning).
+    [self expectationForElapsedTimeInterval:15. withHandler:nil];
+    [self waitForExpectationsWithTimeout:30. handler:nil];
+    
+    [self mpt_expectationForNotification:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController handler:^BOOL(NSNotification * _Nonnull notification) {
+        return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
+    }];
+    
+    // Seek forward relative to the current position
+    CMTime targetTime2 = CMTimeAdd(self.mediaPlayerController.currentTime, CMTimeMakeWithSeconds(10., NSEC_PER_SEC));
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTime:targetTime2] withCompletionHandler:nil];
+    
+    [self waitForExpectationsWithTimeout:30. handler:nil];
+    
+    TestAssertEqualTimeInSeconds(self.mediaPlayerController.currentTime, CMTimeGetSeconds(targetTime2));
+    TestAssertNotEqualTimeInSeconds(self.mediaPlayerController.timeRange.start, 0.);
+}
+
 - (void)testReset
 {
     @autoreleasepool {
@@ -1383,7 +1446,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         }];
         
         // Pass empty collections as parameters
-        [self.mediaPlayerController playURL:OnDemandTestURL() atTime:CMTimeMakeWithSeconds(2., NSEC_PER_SEC) withSegments:@[] userInfo:@{}];
+        [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:[SRGPosition positionAtTimeInSeconds:2.] withSegments:@[] userInfo:@{}];
         
         [self waitForExpectationsWithTimeout:30. handler:nil];
         
@@ -1440,7 +1503,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStateSeeking;
     }];
     
-    [self.mediaPlayerController seekPreciselyToTime:CMTimeMakeWithSeconds(10., NSEC_PER_SEC) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:10.] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1462,7 +1525,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     }];
     
     // Pass empty collections as parameters
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:@[] userInfo:@{}];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:nil withSegments:@[] userInfo:@{}];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1514,7 +1577,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     }];
     
     // Pass empty collections as parameters
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:@[] userInfo:@{}];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:nil withSegments:@[] userInfo:@{}];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1539,7 +1602,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStateSeeking;
     }];
     
-    [self.mediaPlayerController seekPreciselyToTime:CMTimeMakeWithSeconds(10., NSEC_PER_SEC) withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:[SRGPosition positionAtTimeInSeconds:10.] withCompletionHandler:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1560,7 +1623,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1592,7 +1655,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     }];
     
     AVPlayerItem *playerItem = [AVPlayerItem playerItemWithURL:OnDemandTestURL()];
-    [self.mediaPlayerController playItem:playerItem atTime:kCMTimeZero withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playItem:playerItem atPosition:nil withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1623,7 +1686,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1640,14 +1703,14 @@ static NSURL *AudioOverHTTPTestURL(void)
     // The player cannot be started by simply calling -play
     [self expectationForElapsedTimeInterval:4. withHandler:nil];
     
-    id eventObserver = [[NSNotificationCenter defaultCenter] addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+    id eventObserver = [NSNotificationCenter.defaultCenter addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         XCTFail(@"The player cannot be restarted with a play after a reset. No event expected");
     }];
     
     [self.mediaPlayerController play];
     
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
-        [[NSNotificationCenter defaultCenter] removeObserver:eventObserver];
+        [NSNotificationCenter.defaultCenter removeObserver:eventObserver];
     }];
 }
 
@@ -1658,7 +1721,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1688,7 +1751,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController playURL:DVRTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:DVRTestURL() atPosition:nil withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1718,7 +1781,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1749,7 +1812,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1766,14 +1829,14 @@ static NSURL *AudioOverHTTPTestURL(void)
     // The player cannot be started by simply calling -play
     [self expectationForElapsedTimeInterval:4. withHandler:nil];
     
-    id eventObserver = [[NSNotificationCenter defaultCenter] addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+    id eventObserver = [NSNotificationCenter.defaultCenter addObserverForName:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         XCTFail(@"The player cannot be restarted with a togglePlayPause after a reset. No event expected");
     }];
     
     [self.mediaPlayerController togglePlayPause];
     
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
-        [[NSNotificationCenter defaultCenter] removeObserver:eventObserver];
+        [NSNotificationCenter.defaultCenter removeObserver:eventObserver];
     }];
 }
 
@@ -1785,7 +1848,7 @@ static NSURL *AudioOverHTTPTestURL(void)
     }];
     
     NSDictionary *userInfo = @{ @"test_key" : @"test_value" };
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:userInfo];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:userInfo];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1815,7 +1878,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
     }];
     
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
 }
@@ -1844,7 +1907,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         [configurationReloadExpectation fulfill];
     };
     
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1883,7 +1946,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         [configurationInitialReloadExpectation fulfill];
     };
     
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
     
@@ -1918,7 +1981,7 @@ static NSURL *AudioOverHTTPTestURL(void)
         return YES;
     }];
     
-    [self.mediaPlayerController playURL:OnDemandTestURL() atTime:kCMTimeZero withSegments:nil userInfo:nil];
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:nil withSegments:nil userInfo:nil];
     
     [self waitForExpectationsWithTimeout:30. handler:nil];
 }
@@ -2007,6 +2070,96 @@ static NSURL *AudioOverHTTPTestURL(void)
     [self waitForExpectationsWithTimeout:30. handler:^(NSError * _Nullable error) {
         [self.mediaPlayerController removePeriodicTimeObserver:periodicTimeObserver];
     }];
+}
+
+- (void)testOnDemandStreamEndDefaultTolerance
+{
+    [self mpt_expectationForNotification:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController handler:^BOOL(NSNotification * _Nonnull notification) {
+        return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
+    }];
+    
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:[SRGPosition positionAtTimeInSeconds:1793.] withSegments:nil userInfo:nil];
+    
+    [self waitForExpectationsWithTimeout:30. handler:nil];
+    
+    XCTAssertTrue(CMTIME_COMPARE_INLINE(self.mediaPlayerController.currentTime, ==, CMTimeMakeWithSeconds(1793., NSEC_PER_SEC)));
+}
+
+- (void)testOnDemandStreamEndAbsoluteTolerance
+{
+    self.mediaPlayerController.endTolerance = 10.;
+    
+    [self mpt_expectationForNotification:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController handler:^BOOL(NSNotification * _Nonnull notification) {
+        return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
+    }];
+    
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:[SRGPosition positionAtTimeInSeconds:1793.] withSegments:nil userInfo:nil];
+    
+    [self waitForExpectationsWithTimeout:30. handler:nil];
+    
+    TestAssertAlmostEqual(self.mediaPlayerController.currentTime, 0., 1.);
+}
+
+- (void)testOnDemandStreamEndRelativeTolerance
+{
+    self.mediaPlayerController.endToleranceRatio = 0.1;         // 10% of the total length
+    
+    [self mpt_expectationForNotification:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController handler:^BOOL(NSNotification * _Nonnull notification) {
+        return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
+    }];
+    
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:[SRGPosition positionAtTimeInSeconds:1700.] withSegments:nil userInfo:nil];
+    
+    [self waitForExpectationsWithTimeout:30. handler:nil];
+    
+    TestAssertAlmostEqual(self.mediaPlayerController.currentTime, 0., 1.);
+}
+
+- (void)testLivestreamEndAbsoluteTolerance
+{
+    self.mediaPlayerController.endTolerance = 10.;
+    
+    [self mpt_expectationForNotification:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController handler:^BOOL(NSNotification * _Nonnull notification) {
+        return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
+    }];
+    
+    [self.mediaPlayerController playURL:LiveTestURL() atPosition:nil withSegments:nil userInfo:nil];
+    
+    [self waitForExpectationsWithTimeout:30. handler:nil];
+    
+    TestAssertAlmostEqual(self.mediaPlayerController.currentTime, 0., 2.);
+}
+
+- (void)testDVRStreamEndAbsoluteTolerance
+{
+    self.mediaPlayerController.endTolerance = 10.;
+    
+    [self mpt_expectationForNotification:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController handler:^BOOL(NSNotification * _Nonnull notification) {
+        return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
+    }];
+    
+    [self.mediaPlayerController playURL:DVRTestURL() atPosition:nil withSegments:nil userInfo:nil];
+    
+    [self waitForExpectationsWithTimeout:30. handler:nil];
+    
+    XCTAssertTrue(CMTIME_COMPARE_INLINE(self.mediaPlayerController.currentTime, >, CMTimeSubtract(CMTimeRangeGetEnd(self.mediaPlayerController.timeRange), CMTimeMakeWithSeconds(1., NSEC_PER_SEC))));
+}
+
+- (void)testDVRStreamEndSmallestTolerance
+{
+    self.mediaPlayerController.endTolerance = 10.;
+    self.mediaPlayerController.endToleranceRatio = 0.1;         // 10% of the total length 1800 seconds = 180 seconds
+    
+    [self mpt_expectationForNotification:SRGMediaPlayerPlaybackStateDidChangeNotification object:self.mediaPlayerController handler:^BOOL(NSNotification * _Nonnull notification) {
+        return [notification.userInfo[SRGMediaPlayerPlaybackStateKey] integerValue] == SRGMediaPlayerPlaybackStatePlaying;
+    }];
+    
+    // Smallest must win, i.e if we seek ~100 seconds from the end, playback should start at the desired location
+    [self.mediaPlayerController playURL:OnDemandTestURL() atPosition:[SRGPosition positionAtTimeInSeconds:1700.] withSegments:nil userInfo:nil];
+    
+    [self waitForExpectationsWithTimeout:30. handler:nil];
+    
+    XCTAssertTrue(CMTIME_COMPARE_INLINE(self.mediaPlayerController.currentTime, ==, CMTimeMakeWithSeconds(1700., NSEC_PER_SEC)));
 }
 
 @end

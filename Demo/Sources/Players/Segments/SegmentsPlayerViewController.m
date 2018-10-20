@@ -13,7 +13,7 @@
 
 @property (nonatomic) Media *media;
 
-@property (nonatomic, weak) Segment *selectedSegment;
+@property (nonatomic, weak) DemoSegment *selectedSegment;
 
 @property (nonatomic) IBOutlet SRGMediaPlayerController *mediaPlayerController;         // top object, strong
 
@@ -52,31 +52,31 @@
     // Use a custom transition, some subtle issues were discovered with incorrect implementations, when animated
     // view controllers have an AVPlayer somewhere.
     self.transitioningDelegate = self;
-
+    
     self.timelineSlider.delegate = self;
     self.blockingOverlayView.hidden = YES;
-
-    NSString *className = NSStringFromClass([SegmentCollectionViewCell class]);
+    
+    NSString *className = NSStringFromClass(SegmentCollectionViewCell.class);
     UINib *cellNib = [UINib nibWithNibName:className bundle:nil];
     [self.timelineView registerNib:cellNib forCellWithReuseIdentifier:className];
     
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(didSkipSegment:)
-                                                 name:SRGMediaPlayerDidSkipBlockedSegmentNotification
-                                               object:self.mediaPlayerController];
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(segmentDidStart:)
-                                                 name:SRGMediaPlayerSegmentDidStartNotification
-                                               object:self.mediaPlayerController];
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(segmentDidEnd:)
-                                                 name:SRGMediaPlayerSegmentDidEndNotification
-                                               object:self.mediaPlayerController];
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(didSkipSegment:)
+                                               name:SRGMediaPlayerDidSkipBlockedSegmentNotification
+                                             object:self.mediaPlayerController];
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(segmentDidStart:)
+                                               name:SRGMediaPlayerSegmentDidStartNotification
+                                             object:self.mediaPlayerController];
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(segmentDidEnd:)
+                                               name:SRGMediaPlayerSegmentDidEndNotification
+                                             object:self.mediaPlayerController];
     
     self.externalPlaybackSwitch.on = self.mediaPlayerController.player.usesExternalPlaybackWhileExternalScreenIsActive;
     
     self.mediaPlayerController.view.viewMode = self.media.is360 ? SRGMediaPlayerViewModeMonoscopic : SRGMediaPlayerViewModeFlat;
-    [self.mediaPlayerController playURL:self.media.URL atTime:kCMTimeZero withSegments:self.media.segments userInfo:@{ @"test_field" : @"test_value" }];
+    [self.mediaPlayerController playURL:self.media.URL atPosition:nil withSegments:self.media.segments userInfo:@{ @"test_field" : @"test_value" }];
 }
 
 #pragma mark UI
@@ -97,7 +97,7 @@
 - (void)timeSlider:(SRGTimeSlider *)slider isMovingToPlaybackTime:(CMTime)time withValue:(float)value interactive:(BOOL)interactive
 {
     [self updateAppearanceWithTime:time];
-
+    
     if (interactive) {
         NSPredicate *predicate = [NSPredicate predicateWithBlock:^BOOL(id<SRGSegment> _Nonnull segment, NSDictionary<NSString *, id> *_Nullable bindings) {
             return CMTimeRangeContainsTime(segment.srg_timeRange, time);
@@ -116,8 +116,8 @@
 
 - (UICollectionViewCell *)timelineView:(SRGTimelineView *)timelineView cellForSegment:(id<SRGSegment>)segment
 {
-    SegmentCollectionViewCell *segmentCell = [timelineView dequeueReusableCellWithReuseIdentifier:NSStringFromClass([SegmentCollectionViewCell class]) forSegment:segment];
-    segmentCell.segment = (Segment *)segment;
+    SegmentCollectionViewCell *segmentCell = [timelineView dequeueReusableCellWithReuseIdentifier:NSStringFromClass(SegmentCollectionViewCell.class) forSegment:segment];
+    segmentCell.segment = (DemoSegment *)segment;
     return segmentCell;
 }
 
@@ -228,7 +228,7 @@
 {
     NSLog(@"Segment did start: %@", notification.userInfo);
     
-    Segment *segment = notification.userInfo[SRGMediaPlayerSegmentKey];
+    DemoSegment *segment = notification.userInfo[SRGMediaPlayerSegmentKey];
     if (segment == self.selectedSegment) {
         self.selectedSegment = nil;
     }

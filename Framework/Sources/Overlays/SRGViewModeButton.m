@@ -51,7 +51,7 @@ static void commonInit(SRGViewModeButton *self);
 - (void)setMediaPlayerView:(SRGMediaPlayerView *)mediaPlayerView
 {
     [_mediaPlayerView removeObserver:self keyPath:@keypath(_mediaPlayerView.viewMode)];
-
+    
     _mediaPlayerView = mediaPlayerView;
     [self updateAppearanceForMediaPlayerView:mediaPlayerView];
     
@@ -66,12 +66,12 @@ static void commonInit(SRGViewModeButton *self);
 
 - (UIImage *)viewModeMonoscopicImage
 {
-    return _viewModeMonoscopicImage ?: [UIImage imageNamed:@"view_mode_monoscopic" inBundle:[NSBundle srg_mediaPlayerBundle] compatibleWithTraitCollection:nil];
+    return _viewModeMonoscopicImage ?: [UIImage imageNamed:@"view_mode_monoscopic" inBundle:NSBundle.srg_mediaPlayerBundle compatibleWithTraitCollection:nil];
 }
 
 - (UIImage *)viewModeStereoscopicImage
 {
-    return _viewModeStereoscopicImage ?: [UIImage imageNamed:@"view_mode_stereoscopic" inBundle:[NSBundle srg_mediaPlayerBundle] compatibleWithTraitCollection:nil];
+    return _viewModeStereoscopicImage ?: [UIImage imageNamed:@"view_mode_stereoscopic" inBundle:NSBundle.srg_mediaPlayerBundle compatibleWithTraitCollection:nil];
 }
 
 - (void)setAlwaysHidden:(BOOL)alwaysHidden
@@ -150,6 +150,7 @@ static void commonInit(SRGViewModeButton *self);
     UIButton *fakeInterfaceBuilderButton = [UIButton buttonWithType:UIButtonTypeSystem];
     fakeInterfaceBuilderButton.frame = self.bounds;
     fakeInterfaceBuilderButton.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    fakeInterfaceBuilderButton.imageView.contentMode = UIViewContentModeScaleAspectFill;
     [fakeInterfaceBuilderButton setImage:self.viewModeMonoscopicImage forState:UIControlStateNormal];
     [self addSubview:fakeInterfaceBuilderButton];
     self.fakeInterfaceBuilderButton = fakeInterfaceBuilderButton;
@@ -202,6 +203,7 @@ static void commonInit(SRGViewModeButton *self)
     UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
     button.frame = self.bounds;
     button.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    button.imageView.contentMode = UIViewContentModeScaleAspectFill;
     [button addTarget:self action:@selector(srg_viewModeButton_toggleViewMode:) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:button];
     self.button = button;

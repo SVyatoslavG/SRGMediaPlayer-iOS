@@ -12,6 +12,12 @@
 		</dict>
 		<dict>
 			<key>name</key>
+			<string>Livestream with DVR</string>
+			<key>url</key>
+			<string>http://tagesschau-lh.akamaihd.net/i/tagesschau_1@119231/master.m3u8</string>
+		</dict>
+		<dict>
+			<key>name</key>
 			<string>Apple Basic Stream</string>
 			<key>url</key>
 			<string>http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8</string>
@@ -42,6 +48,12 @@
 		</dict>
 		<dict>
 			<key>name</key>
+			<string>Gens d&apos;hiver</string>
+			<key>url</key>
+			<string>https://rtsvodww-vh.akamaihd.net/i/genhi/2018/genhi_20180126_full_f_1067247-,301k,101k,701k,1201k,2001k,fra-ad,.mp4.csmil/master.m3u8?audiotrack=0:fra:Fran%25C3%25A7ais,5:fra:Fran%25C3%25A7ais+%2528AD%2529</string>
+		</dict>
+		<dict>
+			<key>name</key>
 			<string>Short non-streamed video</string>
 			<key>url</key>
 			<string>http://www.sample-videos.com/video/mp4/720/big_buck_bunny_720p_1mb.mp4</string>
@@ -56,7 +68,7 @@
 			<key>name</key>
 			<string>Gotthard 360 video</string>
 			<key>url</key>
-			<string>https://rtsvodww-vh.akamaihd-staging.net/i/360/2017/Gothard_360_full_f_8414077-,301k,701k,1201k,2001k,.mp4.csmil/master.m3u8?__b__=2000</string>
+			<string>https://rtsvodww-vh.akamaihd.net/i/360/2017/2_Gothard_360_full_f_8414077-,301k,701k,1201k,2001k,.mp4.csmil/master.m3u8</string>
 			<key>is360</key>
 			<true/>
 		</dict>

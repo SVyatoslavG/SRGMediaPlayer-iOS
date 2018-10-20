@@ -6,6 +6,8 @@
 
 #import "SegmentCollectionViewCell.h"
 
+#import "CMTimeRange+SRGMediaPlayer.h"
+
 static NSDateComponentsFormatter *SegmentDurationDateComponentsFormatter(void)
 {
     static NSDateComponentsFormatter *s_dateComponentsFormatter;
@@ -32,22 +34,22 @@ static NSDateComponentsFormatter *SegmentDurationDateComponentsFormatter(void)
 
 #pragma mark Getters and setters
 
-- (void)setSegment:(Segment *)segment
+- (void)setSegment:(DemoSegment *)segment
 {
     _segment = segment;
-
+    
     self.titleLabel.text = segment.name;
-
-    if (! CMTIMERANGE_IS_EMPTY(segment.srg_timeRange)) {
+    
+    if (SRG_CMTIMERANGE_IS_NOT_EMPTY(segment.srg_timeRange)) {
         self.durationLabel.hidden = NO;
         self.durationLabel.text = [SegmentDurationDateComponentsFormatter() stringFromTimeInterval:CMTimeGetSeconds(segment.srg_timeRange.duration)];
     }
     else {
         self.durationLabel.hidden = YES;
     }
-
+    
     self.timestampLabel.text = [SegmentDurationDateComponentsFormatter() stringFromTimeInterval:CMTimeGetSeconds(segment.srg_timeRange.start)];
-
+    
     self.alpha = segment.srg_isBlocked ? 0.5f : 1.f;
 }
 
@@ -61,7 +63,7 @@ static NSDateComponentsFormatter *SegmentDurationDateComponentsFormatter(void)
 
 #pragma mark UI
 
-- (void)updateAppearanceWithTime:(CMTime)time selectedSegment:(Segment *)selectedSegment
+- (void)updateAppearanceWithTime:(CMTime)time selectedSegment:(DemoSegment *)selectedSegment
 {
     CMTimeRange r = self.segment.srg_timeRange;
     float progress = (CMTimeGetSeconds(time) - CMTimeGetSeconds(r.start)) / (CMTimeGetSeconds(CMTimeAdd(r.start, r.duration)) - CMTimeGetSeconds(r.start));
@@ -71,10 +73,10 @@ static NSDateComponentsFormatter *SegmentDurationDateComponentsFormatter(void)
     
     UIColor *selectionColor = [UIColor colorWithRed:128.f / 255.f green:0.f / 255.f blue:0.f / 255.f alpha:1.f];
     if (selectedSegment) {
-        self.backgroundColor = (self.segment == selectedSegment) ? selectionColor : [UIColor blackColor];
+        self.backgroundColor = (self.segment == selectedSegment) ? selectionColor : UIColor.blackColor;
     }
     else {
-        self.backgroundColor = (progress != 0.f && progress != 1.f) ? selectionColor : [UIColor blackColor];
+        self.backgroundColor = (progress != 0.f && progress != 1.f) ? selectionColor : UIColor.blackColor;
     }
 }
 

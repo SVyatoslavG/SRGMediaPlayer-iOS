@@ -124,7 +124,7 @@ static void commonInit(SRGTimelineView *self);
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath
 {
     id<SRGSegment> segment = self.mediaPlayerController.visibleSegments[indexPath.row];
-    [self.mediaPlayerController seekToSegment:segment withCompletionHandler:nil];
+    [self.mediaPlayerController seekToPosition:nil inSegment:segment withCompletionHandler:nil];
     
     if ([self.delegate respondsToSelector:@selector(timelineView:didSelectSegmentAtIndexPath:)]) {
         [self.delegate timelineView:self didSelectSegmentAtIndexPath:indexPath];
@@ -176,7 +176,7 @@ static void commonInit(SRGTimelineView *self);
                                                                 0.f,
                                                                 self.itemWidth,
                                                                 CGRectGetHeight(self.frame))];
-        view.backgroundColor = [UIColor darkGrayColor];
+        view.backgroundColor = UIColor.darkGrayColor;
         [self addSubview:view];
     }
 }
@@ -191,7 +191,7 @@ static void commonInit(SRGTimelineView *self)
     collectionViewLayout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
     
     UICollectionView *collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:collectionViewLayout];
-    collectionView.backgroundColor = [UIColor clearColor];
+    collectionView.backgroundColor = UIColor.clearColor;
     collectionView.alwaysBounceHorizontal = YES;
     collectionView.dataSource = self;
     collectionView.delegate = self;

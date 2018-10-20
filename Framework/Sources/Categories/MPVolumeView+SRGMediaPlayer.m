@@ -8,10 +8,10 @@
 
 @implementation MPVolumeView (SRGMediaPlayer)
 
-- (UIButton *)srg_airplayButton
+- (UIButton *)srg_airPlayButton
 {
     NSPredicate *predicate = [NSPredicate predicateWithBlock:^BOOL(id _Nullable evaluatedObject, NSDictionary<NSString *,id> * _Nullable bindings) {
-        return [evaluatedObject isKindOfClass:[UIButton class]];
+        return [evaluatedObject isKindOfClass:UIButton.class];
     }];
     return [self.subviews filteredArrayUsingPredicate:predicate].firstObject;
 }

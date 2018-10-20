@@ -15,7 +15,7 @@ At the highest level, the library intends to provide a default player view contr
 This default player view controller is itself based on a set of lower-level components which you can combine to match your requirements:
 
 * A media player controller, which can be optionally attached to a view for playing videos.
-* A set of components (slider, play / pause button, timeline, message view, Airplay overlay, etc.) which can be connected to an underlying media player controller.
+* A set of components (slider, play / pause button, timeline, message view, AirPlay overlay, etc.) which can be connected to an underlying media player controller.
 
 Let us now discuss these components further and describe how they can be glued together.
 
@@ -40,11 +40,7 @@ Custom player layouts can be designed entirely in Interface Builder, whether you
 
 ![Connecting outlets](Getting-started-images/outlets.jpg)
 
-Start by adding a view controller to a storyboard file, and drop a custom object from Xcode _Utilities_ panel:
-
-![Custom objects](Getting-started-images/custom-objects.jpg)
-
-Set its class to `SRGMediaPlayerController`. This controller object will manage playback of medias.
+Start by adding a view controller to a storyboard file. Drop a custom object from the library and set its class to `SRGMediaPlayerController`. This controller object will manage playback of medias.
 
 Creating the player layout is then a matter of dropping more views onto the layout, setting their constraints, and connecting them to the media player controller:
 
@@ -63,7 +59,7 @@ To start playback, bind your media player controller to a `mediaPlayerController
 {
     [super viewWillAppear:animated];
 
-    if ([self isMovingToParentViewController] || [self isBeingPresented]) {
+    if (self.movingToParentViewController || self.beingPresented) {
         NSURL *mediaURL = [NSURL URLWithString:@"http://..."];
         [self.mediaPlayerController playURL:mediaURL];
     }
@@ -96,40 +92,55 @@ You can display segments using dedicated built-in overlay classes you can drop o
 
 Both provide a `-reloadData` method to reload segments from the associated media player controller. Please refer to their respective header documentation to learn about the delegate protocols you need to implement to respond to reload requests.
 
-## Airplay support
+## AirPlay support
 
-Airplay configuration is entirely the responsibilty of client applications. `SRGMediaPlayerController` exposes three block hooks where you can easily configure Airplay playback settings as you see fit:
+AirPlay configuration is entirely the responsibilty of client applications. `SRGMediaPlayerController` exposes three block hooks where you can easily configure AirPlay playback settings as you see fit:
 
 * `playerCreationBlock`: Called when the `AVPlayer` is created.
 * `playerConfigurationBlock`: Called when the `AVPlayer` is created, and when a configuration reload is requested.
 * `playerDestructionBlock`: Called when the `AVPlayer` is released.
 
-To add basic Airplay support to your application, you can for example:
+To add basic AirPlay support to your application, you can for example:
 
 * Enable the corresponding background mode for your target.
 * Enable `allowsExternalPlayback` (which is the default) and `usesExternalPlaybackWhileExternalScreenIsActive` (to switch to full-screen playback when mirroring is active) in the `playerConfigurationBlock`.
 
-You can also drop an `SRGAirplayButton` onto your layout (displayed only when Airplay is available) or an `SRGAirplayView` (displaying the current route when Airplay is active).
+You can also drop an `SRGAirPlayButton` onto your layout (displayed only when AirPlay is available) or an `SRGAirPlayView` (displaying the current route when AirPlay is active).
 
 ## Audio session management
 
-No audio session specific management is provided by the library. Managing audio sessions is entirely the responsibility of the application, which gives you complete freedom over how playback happens, especially in the background or when switching between applications. As for Airplay setup (see above), you can use the various block hooks to setup and restore audio session settings as required by your application.
+No audio session specific management is provided by the library. Managing audio sessions is entirely the responsibility of the application, which gives you complete freedom over how playback happens, especially in the background or when switching between applications. As for AirPlay setup (see above), you can use the various block hooks to setup and restore audio session settings as required by your application.
 
 For more information, please refer to the [official documentation](https://developer.apple.com/library/ios/documentation/Audio/Conceptual/AudioSessionProgrammingGuide/Introduction/Introduction.html). Audio sessions are a somewhat tricky topic, you should therefore read the documentation well, experiment, and test the behavior of your application on a real device. 
 
 In particular, you should ask yourself:
 
 * What should happen when I was playing music with another app and my app is launched? Should the music continue? Maybe resume after my app stops playing?
-* Do I want to be able to control Airplay playback from the lock screen or the control center?
+* Do I want to be able to control AirPlay playback from the lock screen or the control center?
 * Do I want videos to be _listened to_ when the device is locked, maybe also when the application is in the background?
 
 Moreover, you should check that your application behaves well when receiving phone calls (in particular, audio playback should stop).
 
 ## Control center integration
 
-For proper integration into the control center and the lock screen, use the `MPRemoteCommandCenter` class. For everything to work properly on a device, `[[UIApplication sharedApplication] beginReceivingRemoteControlEvents]` must have been called first (e.g. in your application delegate) and your audio session category should be set to `AVAudioSessionCategoryPlayback`. For more information, please refer to the `MPRemoteCommandCenter` documentation.
+For proper integration into the control center and the lock screen, use the `MPRemoteCommandCenter` class. For everything to work properly on a device, `[UIApplication.sharedApplication beginReceivingRemoteControlEvents]` must have been called first (e.g. in your application delegate) and your audio session category should be set to `AVAudioSessionCategoryPlayback`. For more information, please refer to the `MPRemoteCommandCenter` documentation.
 
 Note that control center integration does not work in the iOS simulator, you will need a real device for tests.
+
+## Custom resource loading and FairPlay support
+
+If you need to customize the resource loading process (e.g. to unencrypt stream chunks on-the-fly or to optimize the way they are retrieved), create a dedicated `AVAssetResourceLoaderDelegate` class. Then play an `AVPlayerItem` built from an asset which this delegate has been assigned to:
+
+```objective-c
+AVURLAsset *asset = ...;
+[asset.resourceLoader setDelegate:resourceLoaderDelegate queue:queue];
+AVPlayerItem *playerItem = [AVPlayerItem playerItemWithAsset:asset];
+[self.mediaPlayerController playItem:playerItem];
+```
+
+where `resourceLoaderDelegate` is an instance of your custom resource loader delegate class, and `queue` is the queue on which events must be dispatched.
+
+In particular, FairPlay requires the use of a custom resource loader delegate for license retrieval. Please refer to the [official FairPlay documentation](https://developer.apple.com/streaming/fps) for more information.
 
 ## Thread-safety
 
