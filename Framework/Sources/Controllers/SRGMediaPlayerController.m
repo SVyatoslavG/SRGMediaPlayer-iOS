@@ -51,7 +51,8 @@ static SRGPosition *SRGMediaPlayerControllerPositionInTimeRange(SRGPosition *pos
 @property (nonatomic) NSArray<id<SRGSegment>> *visibleSegments;
 
 @property (nonatomic) NSMutableDictionary<NSString *, SRGPeriodicTimeObserver *> *periodicTimeObservers;
-@property (nonatomic) id periodicTimeObserver;
+@property (nonatomic) id playerPeriodicTimeObserver;
+@property (nonatomic, weak) id controllerPeriodicTimeObserver;
 
 // Saved values supplied when playback is started
 @property (nonatomic, weak) id<SRGSegment> initialTargetSegment;
@@ -68,6 +69,9 @@ static SRGPosition *SRGMediaPlayerControllerPositionInTimeRange(SRGPosition *pos
 
 @property (nonatomic) CMTime seekStartTime;
 @property (nonatomic) CMTime seekTargetTime;
+
+@property (nonatomic) AVMediaSelectionOption *audioOption;
+@property (nonatomic) AVMediaSelectionOption *subtitleOption;
 
 @property (nonatomic, copy) void (^pictureInPictureControllerCreationBlock)(AVPictureInPictureController *pictureInPictureController);
 
@@ -147,10 +151,13 @@ static SRGPosition *SRGMediaPlayerControllerPositionInTimeRange(SRGPosition *pos
             
             AVPlayerItem *playerItem = player.currentItem;
             
-            if (playerItem.status == AVPlayerItemStatusReadyToPlay) {
+            if (playerItem.status == AVPlayerItemStatusReadyToPlay) {    
                 // Playback start. Use received start parameters, do not update the playback state yet, wait until the
                 // completion handler has been executed (since it might immediately start playback)
                 if (self.startPosition) {
+                    self.audioOption = [self selectedAudioOptionForPlayer:player];
+                    self.subtitleOption = [self selectedSubtitleOptionForPlayer:player];
+                    
                     void (^completionBlock)(BOOL) = ^(BOOL finished) {
                         if (! finished) {
                             return;
@@ -172,30 +179,34 @@ static SRGPosition *SRGMediaPlayerControllerPositionInTimeRange(SRGPosition *pos
                         }
                     };
                     
-                    // If a segment is targeted, add a small offset so that playback is guaranteed to start within the segment
                     SRGPosition *startPosition = self.startPosition;
-                    if (self.targetSegment) {
-                        startPosition = SRGMediaPlayerControllerOffset(startPosition, CMTimeMakeWithSeconds(SRGSegmentSeekOffsetInSeconds, NSEC_PER_SEC));
-                    }
                     
-                    // Take into account tolerance at the end of the content being played. If near the end enough, start
-                    // at the default position instead.
-                    CMTimeRange timeRange = self.targetSegment ? self.targetSegment.srg_timeRange : self.timeRange;
-                    CMTime tolerance = SRGMediaPlayerEffectiveEndTolerance(self.endTolerance, self.endToleranceRatio, CMTimeGetSeconds(timeRange.duration));
-                    CMTime toleratedStartTime = CMTIME_COMPARE_INLINE(startPosition.time, >=, CMTimeSubtract(timeRange.duration, tolerance)) ? kCMTimeZero : startPosition.time;
-                    
-                    // Positions in segments are relative. If not within a segment, they are absolute (relative positions
-                    // are misleading for a DVR stream with a sliding window, and match the absolute position in other cases)
-                    if (self.targetSegment) {
-                        toleratedStartTime = CMTimeAdd(toleratedStartTime, timeRange.start);
-                    }
-                    SRGPosition *toleratedPosition = [SRGPosition positionWithTime:toleratedStartTime toleranceBefore:startPosition.toleranceBefore toleranceAfter:startPosition.toleranceAfter];
-                    
-                    SRGPosition *seekPosition = SRGMediaPlayerControllerPositionInTimeRange(toleratedPosition, timeRange);
-                    if (CMTIME_COMPARE_INLINE(seekPosition.time, ==, kCMTimeZero)) {
+                    // Default position. Nothing to do.
+                    if (CMTIME_COMPARE_INLINE(self.startPosition.time, ==, kCMTimeZero) && ! self.targetSegment) {
                         completionBlock(YES);
                     }
+                    // Non-default start position. Calculate a valid position to seek to.
                     else {
+                        // If a segment is targeted, add a small offset so that playback is guaranteed to start within the segment
+                        if (self.targetSegment) {
+                            startPosition = SRGMediaPlayerControllerOffset(startPosition, CMTimeMakeWithSeconds(SRGSegmentSeekOffsetInSeconds, NSEC_PER_SEC));
+                        }
+                        
+                        // Take into account tolerance at the end of the content being played. If near the end enough, start
+                        // at the default position instead.
+                        CMTimeRange timeRange = self.targetSegment ? self.targetSegment.srg_timeRange : self.timeRange;
+                        CMTime tolerance = SRGMediaPlayerEffectiveEndTolerance(self.endTolerance, self.endToleranceRatio, CMTimeGetSeconds(timeRange.duration));
+                        CMTime toleratedStartTime = CMTIME_COMPARE_INLINE(startPosition.time, >=, CMTimeSubtract(timeRange.duration, tolerance)) ? kCMTimeZero : startPosition.time;
+                        
+                        // Positions in segments are relative. If not within a segment, they are absolute (relative positions
+                        // are misleading for a DVR stream with a sliding window, and match the absolute position in other cases)
+                        if (self.targetSegment) {
+                            toleratedStartTime = CMTimeAdd(toleratedStartTime, timeRange.start);
+                        }
+                        SRGPosition *toleratedPosition = [SRGPosition positionWithTime:toleratedStartTime toleranceBefore:startPosition.toleranceBefore toleranceAfter:startPosition.toleranceAfter];
+                        
+                        SRGPosition *seekPosition = SRGMediaPlayerControllerPositionInTimeRange(toleratedPosition, timeRange);
+                        
                         // Call system method to avoid unwanted seek state in this special case
                         [player seekToTime:seekPosition.time toleranceBefore:seekPosition.toleranceBefore toleranceAfter:seekPosition.toleranceAfter completionHandler:^(BOOL finished) {
                             completionBlock(finished);
@@ -977,6 +988,9 @@ static SRGPosition *SRGMediaPlayerControllerPositionInTimeRange(SRGPosition *pos
     
     self.seekTargetTime = kCMTimeIndefinite;
     
+    self.audioOption = nil;
+    self.subtitleOption = nil;
+    
     self.pictureInPictureController = nil;
 }
 
@@ -1119,6 +1133,67 @@ static SRGPosition *SRGMediaPlayerControllerPositionInTimeRange(SRGPosition *pos
     }];
 }
 
+#pragma mark Tracks
+
+- (AVMediaSelectionOption *)selectedAudioOptionForPlayer:(AVPlayer *)player
+{
+    AVPlayerItem *playerItem = player.currentItem;
+    if (playerItem.status != AVPlayerItemStatusReadyToPlay) {
+        return nil;
+    }
+    
+    AVMediaSelectionGroup *audioGroup = [playerItem.asset mediaSelectionGroupForMediaCharacteristic:AVMediaCharacteristicAudible];
+    return [playerItem selectedMediaOptionInMediaSelectionGroup:audioGroup];
+}
+
+- (AVMediaSelectionOption *)selectedSubtitleOptionForPlayer:(AVPlayer *)player
+{
+    AVPlayerItem *playerItem = player.currentItem;
+    if (playerItem.status != AVPlayerItemStatusReadyToPlay) {
+        return nil;
+    }
+    
+    AVMediaSelectionGroup *subtitleGroup = [playerItem.asset mediaSelectionGroupForMediaCharacteristic:AVMediaCharacteristicLegible];
+    return [playerItem selectedMediaOptionInMediaSelectionGroup:subtitleGroup];
+}
+
+- (void)updateTracksForPlayer:(AVPlayer *)player
+{
+    AVMediaSelectionOption *audioOption = [self selectedAudioOptionForPlayer:player];
+    if ((audioOption || self.audioOption) && ! [audioOption isEqual:self.audioOption]) {
+        NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
+        if (self.audioOption) {
+            userInfo[SRGMediaPlayerPreviousTrackKey] = self.audioOption;
+        }
+        if (audioOption) {
+            userInfo[SRGMediaPlayerTrackKey] = audioOption;
+        }
+        
+        self.audioOption = audioOption;
+        
+        [NSNotificationCenter.defaultCenter postNotificationName:SRGMediaPlayerAudioTrackDidChangeNotification
+                                                          object:self
+                                                        userInfo:[userInfo copy]];
+    }
+    
+    AVMediaSelectionOption *subtitleOption = [self selectedSubtitleOptionForPlayer:player];
+    if ((subtitleOption || self.subtitleOption) && ! [subtitleOption isEqual:self.subtitleOption]) {
+        NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
+        if (self.subtitleOption) {
+            userInfo[SRGMediaPlayerPreviousTrackKey] = self.subtitleOption;
+        }
+        if (subtitleOption) {
+            userInfo[SRGMediaPlayerTrackKey] = subtitleOption;
+        }
+        
+        self.subtitleOption = subtitleOption;
+        
+        [NSNotificationCenter.defaultCenter postNotificationName:SRGMediaPlayerSubtitleTrackDidChangeNotification
+                                                          object:self
+                                                        userInfo:[userInfo copy]];
+    }
+}
+
 #pragma mark Time observers
 
 - (void)registerTimeObserversForPlayer:(AVPlayer *)player
@@ -1128,9 +1203,8 @@ static SRGPosition *SRGMediaPlayerControllerPositionInTimeRange(SRGPosition *pos
     }
     
     @weakify(self)
-    self.periodicTimeObserver = [player addPeriodicTimeObserverForInterval:CMTimeMakeWithSeconds(0.1, NSEC_PER_SEC) queue:NULL usingBlock:^(CMTime time) {
+    self.playerPeriodicTimeObserver = [player addPeriodicTimeObserverForInterval:CMTimeMakeWithSeconds(0.1, NSEC_PER_SEC) queue:NULL usingBlock:^(CMTime time) {
         @strongify(self)
-        
         if (self.playerLayer.readyForDisplay) {
             if (self.pictureInPictureController.playerLayer != self.playerLayer) {
                 self.pictureInPictureController = [[AVPictureInPictureController alloc] initWithPlayerLayer:self.playerLayer];
@@ -1143,12 +1217,19 @@ static SRGPosition *SRGMediaPlayerControllerPositionInTimeRange(SRGPosition *pos
         
         [self updateSegmentStatusForPlaybackState:self.playbackState previousPlaybackState:self.playbackState time:time];
     }];
+    
+    self.controllerPeriodicTimeObserver = [self addPeriodicTimeObserverForInterval:CMTimeMakeWithSeconds(0.1, NSEC_PER_SEC) queue:NULL usingBlock:^(CMTime time) {
+        @strongify(self)
+        [self updateTracksForPlayer:player];
+    }];
 }
 
 - (void)unregisterTimeObserversForPlayer:(AVPlayer *)player
 {
-    [player removeTimeObserver:self.periodicTimeObserver];
-    self.periodicTimeObserver = nil;
+    [player removeTimeObserver:self.playerPeriodicTimeObserver];
+    self.playerPeriodicTimeObserver = nil;
+    
+    [self removePeriodicTimeObserver:self.controllerPeriodicTimeObserver];
     
     for (SRGPeriodicTimeObserver *periodicTimeObserver in [self.periodicTimeObservers allValues]) {
         [periodicTimeObserver detachFromMediaPlayer];
@@ -1161,7 +1242,7 @@ static SRGPosition *SRGMediaPlayerControllerPositionInTimeRange(SRGPosition *pos
         return nil;
     }
     
-    NSString *identifier = [[NSUUID UUID] UUIDString];
+    NSString *identifier = NSUUID.UUID.UUIDString;
     SRGPeriodicTimeObserver *periodicTimeObserver = [self periodicTimeObserverForInterval:interval queue:queue];
     [periodicTimeObserver setBlock:block forIdentifier:identifier];
     
